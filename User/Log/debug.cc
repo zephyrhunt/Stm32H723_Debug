@@ -32,7 +32,10 @@ void Debug::Init() {
   setvbuf(stdout, nullptr, _IONBF, 0);
   /* Endable usart IDLE interrupt */
   HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx_buffer_, sizeof(rx_buffer_));
+  __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_TC);
+  __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
   /* initialize EasyLogger */
   elog_init();
   elog_output_lock_enabled(1);
@@ -48,10 +51,22 @@ void Debug::Init() {
 }
 
 /*
- * Parse the parameter from the string
- * Example: "key:value"
+ * @brief  解析参数
+ * 示例: "key:value"
  */
 void Debug::ParseParameter(uint8_t *str, int32_t length) {
+  if (1 == length) {
+    /* 单个字符命令，来自串口终端 */
+    if (*str == 13) {
+      /* 回车键 Enter*/
+      elog_raw("\n\r");
+    } else if (*str == 127 || *str == '\b') {
+      /* 退格键 Delete*/
+      elog_raw("\b \b");
+    } else {
+      elog_raw("%c", *str);
+    }
+  }
   std::string cpp_str(reinterpret_cast<char *>(str), length);
   auto pos = cpp_str.find(':');
   if (pos != std::string::npos) {
@@ -66,7 +81,6 @@ void Debug::ParseParameter(uint8_t *str, int32_t length) {
 
 void Debug::StartReceive() {
   HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx_buffer_, sizeof(rx_buffer_));
-  __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 }
 
 void Debug::Test() {
@@ -83,12 +97,26 @@ Debug &Debug::instance() {
 }
 
 extern "C" {
+
+/*
+ * @brief  Rx事件(IDLE)接收回调函数
+ */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
   if (huart->Instance == huart1.Instance) {
     Debug &debug = Debug::instance(); // Copy will generate new instance, use &
     debug.ParseParameter(huart->pRxBuffPtr, Size);
     /* Start DMA again */
     Debug::instance().StartReceive();
+  }
+}
+
+/*
+ * @brief  Rx接收回调函数，单个字符接收
+ * @note 开启了DMA接收，这个函数不会被调用
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == huart1.Instance) {
+    HAL_UART_Transmit_DMA(&huart1, huart->pRxBuffPtr, 1);
   }
 }
 

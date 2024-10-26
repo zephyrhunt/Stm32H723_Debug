@@ -40,6 +40,7 @@ class Debug {
   std::map<std::string, float> parameter_list_;
   std::map<std::string, uint8_t> parameter_changed_list_;
   uint8_t rx_buffer_[256];
+  uint8_t rx_raw_buffer_[256];
   UART_HandleTypeDef *huart;
 };
 

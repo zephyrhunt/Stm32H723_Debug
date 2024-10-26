@@ -29,11 +29,10 @@ void TestTask(void *argument) {
   static TickType_t xLastWakeTime = xTaskGetTickCount();
   int xx = 0;
   while (1) {
-    log_w("Hello World!:%d", xx);
-    elog_raw("raw:%d\n", xx);
+//    log_w("Hello World!:%d", xx);
+//    elog_raw("raw:%d\n", xx);
     xx++;
-    vTaskDelayUntil(&xLastWakeTime, 500);
+    vTaskDelayUntil(&xLastWakeTime, 1);
   }
 }
-
 }

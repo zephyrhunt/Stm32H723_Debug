@@ -35,15 +35,13 @@ void Debug::Init() {
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
   /* initialize EasyLogger */
   elog_init();
-//  elog_async_enabled(1);
-//  elog_buf_enabled(1);
   elog_output_lock_enabled(1);
 /* set EasyLogger log format */
   elog_set_fmt(ELOG_LVL_ASSERT, ELOG_FMT_ALL);
   elog_set_fmt(ELOG_LVL_ERROR, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_FUNC | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_WARN, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_INFO, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
-  elog_set_fmt(ELOG_LVL_DEBUG, ELOG_FMT_ALL & ~ELOG_FMT_FUNC);
+  elog_set_fmt(ELOG_LVL_DEBUG, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_VERBOSE, ELOG_FMT_ALL & ~ELOG_FMT_FUNC);
 /* start EasyLogger */
   elog_start();
@@ -55,7 +53,6 @@ void Debug::Init() {
  */
 void Debug::ParseParameter(uint8_t *str, int32_t length) {
   std::string cpp_str(reinterpret_cast<char *>(str), length);
-
   auto pos = cpp_str.find(':');
   if (pos != std::string::npos) {
     std::string key = cpp_str.substr(0, pos);
@@ -71,6 +68,7 @@ void Debug::StartReceive() {
   HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx_buffer_, sizeof(rx_buffer_));
   __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 }
+
 void Debug::Test() {
   if (parameter_list_.find("test") != parameter_list_.end()) {
     printf("Test success value:%f\n", parameter_list_["test"]);
@@ -78,6 +76,7 @@ void Debug::Test() {
     printf("Test no data\n");
   }
 }
+
 Debug &Debug::instance() {
   static Debug debug;
   return debug;
@@ -90,6 +89,14 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
     debug.ParseParameter(huart->pRxBuffPtr, Size);
     /* Start DMA again */
     Debug::instance().StartReceive();
+  }
+}
+
+extern osSemaphoreId_t elog_dma_lockHandle;
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+  if (huart->Instance == huart1.Instance) {
+    /* 发送完成才释放信号量 */
+    osSemaphoreRelease(elog_dma_lockHandle);
   }
 }
 

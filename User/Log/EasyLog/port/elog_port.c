@@ -33,14 +33,9 @@
 
 extern osSemaphoreId_t elog_lockHandle;
 extern osSemaphoreId_t elog_asyncHandle;
+/* 需要在发送完成时释放该信号量 */
 extern osSemaphoreId_t elog_dma_lockHandle;
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-  if (huart->Instance == huart1.Instance) {
-    /* 发送完成才释放信号量 */
-    osSemaphoreRelease(elog_dma_lockHandle);
-  }
-}
 /**
  * EasyLogger port initialize
  *

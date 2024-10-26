@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration name="OCD Stm32H723_Debug" type="com.jetbrains.cidr.embedded.openocd.conf.type" factoryName="com.jetbrains.cidr.embedded.openocd.conf.factory" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="Stm32H723_Debug" TARGET_NAME="Stm32H723_Debug.elf" version="1" RUN_TARGET_PROJECT_NAME="Stm32H723_Debug" RUN_TARGET_NAME="Stm32H723_Debug.elf">
+    <openocd version="1" gdb-port="3333" telnet-port="4444" board-config="C:\Users\A\CLionProjects\Stm32H723_Debug\st_nucleo_h743zi.cfg" reset-type="INIT" download-type="UPDATED_ONLY">
+      <debugger kind="GDB" isBundled="true" />
+    </openocd>
+    <method v="2">
+      <option name="CLION.COMPOUND.BUILD" enabled="true" />
+    </method>
+  </configuration>
+</component>

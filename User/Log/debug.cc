@@ -47,46 +47,15 @@ void Debug::Init() {
   elog_set_fmt(ELOG_LVL_WARN, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_INFO, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_DEBUG, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
-  elog_set_fmt(ELOG_LVL_VERBOSE, ELOG_FMT_ALL & ~ELOG_FMT_FUNC);
+  elog_set_fmt(ELOG_LVL_VERBOSE, ~ELOG_FMT_ALL);
   elog_start();
 
+  log_v("EasyLogger V%s is initialize success.ver", ELOG_SW_VERSION);
   /* 输出软件信息 */
-  PrintInfo();
-}
-
-/*
- * @brief  解析参数
- * 示例: "key:value"
- */
-void Debug::ParseParameter(uint8_t *str, int32_t length) {
-  if (1 == length) {
-    /* 单个字符命令，来自串口终端 */
-    if (*str == 13) {
-      /* 回车键 Enter*/
-      elog_set_output_enabled(true);
-      elog_raw("\n\r");
-    } else if (*str == 0x03) {
-      /* Ctrl+C */
-      PrintInfo();
-      elog_raw("\n\r");
-      elog_set_output_enabled(false);
-    } else if (*str == 127 || *str == '\b') {
-      /* 退格键 Delete*/
-      elog_raw("\b \b");
-    } else {
-      elog_raw("%c", *str);
-    }
-  }
-  std::string cpp_str(reinterpret_cast<char *>(str), length);
-  auto pos = cpp_str.find(':');
-  if (pos != std::string::npos) {
-    std::string key = cpp_str.substr(0, pos);
-    std::string value = cpp_str.substr(pos + 1);
-    parameter_list_[key] = std::stof(value);
-    parameter_changed_list_[key] = 1;
-    /* 使用特殊格式，不要覆盖vofa的数据 */
-    printf("key--%s_value--%.2f\n", key.c_str(), parameter_list_.at(key));
-  }
+  PrintInfoMenu();
+  PrintHelpMenu();
+  elog_set_output_enabled(true);
+  elog_set_raw_output_enabled(false);
 }
 
 void Debug::StartReceive() {
@@ -109,22 +78,133 @@ Debug &Debug::instance() {
 /*
  * @brief 输出软件信息
  */
-void Debug::PrintInfo() {
-  // 打印NICHIJOU大字
-  // 输出红色
-  elog_raw("\033[31m\r\n");
-  elog_raw(" _      _  ____  _     _     _  ____  _    \r\n");
-  elog_raw("/ \\  /|/ \\/   _\\/ \\ /|/ \\   / |/  _ \\/ \\ /\\\r\n");
-  elog_raw("| |\\ ||| ||  /  | |_||| |   | || / \\|| | ||\r\n");
-  elog_raw("| | \\||| ||  \\__| | ||| |/\\_| || \\_/|| \\_/|\r\n");
-  elog_raw("\\_/  \\|\\_/\\____/\\_/ \\|\\_/\\____/\\____/\\____/\r\n");
-  // 获取编译事件
-  elog_raw("Build time: %s %s\r\n", __DATE__, __TIME__);
-  elog_raw("Project Stm32H723_Debug, Version 1.0\r\n");
-  elog_raw("\033[0m");
-  elog_raw("Press Enter or Send 0x0D to start,<C-c> Stop......\r\n");
+void Debug::PrintInfoMenu() {
+  /* From https://patorjk.com/software/taag Calvin S*/
+  log_v("");
+  log_v("╔╗║╦╔═╗╦ ╦╦ ╦╔═╗╦ ╦");
+  log_v("║║║║║  ╠═╣║ ║║ ║║ ║");
+  log_v("╝╚╝╩╚═╝╩ ╩╩╚╝╚═╝╚═╝");
+  log_v("Build time: %s %s", __DATE__, __TIME__);
+  log_v("Project Stm32H723_Debug, Version 1.0");
+  log_v("Press h for help ......");
 }
 
+/*
+ * @brief 输出帮助信息
+ */
+void Debug::PrintHelpMenu() {
+  log_v("Help Menu:");
+  log_v("h: Help menu");
+  log_v("i: Print software information");
+  log_v("s: Enter set parameter, key:value");
+  log_v("l: Look up current parameters");
+  log_v("t: Test output");
+  log_v("Esc: Quit test output");
+}
+
+/*
+ * @brief 输出当前参数
+ */
+void Debug::PrintCurrentParameters() {
+  log_v("Current key:value************");
+  for (auto &it : parameter_list_) {
+    log_v("|%s:%.3f", it.first.c_str(), it.second);
+  }
+  log_v("*****************************");
+}
+
+/*
+ * @brief 接收信息进行状态切换
+ */
+void Debug::FsmInput(uint8_t *str, int32_t length) {
+
+  current_state_ = next_state_;
+  uint8_t cmd = *str;
+  switch (current_state_) {
+    case STATE_START:break;
+    case STATE_CMD: /* 等待命令 */
+      ParseCommand(str, length);
+      break;
+    case STATE_SET: /* 设置参数 */
+      if (cmd == KEY_ESC) {
+        parameter_length_ = 0;
+        next_state_ = STATE_CMD;
+        PrintHelpMenu();
+      } else if (cmd == KEY_ENTER) {
+        ParseParameter(parameter_buffer_, parameter_length_);
+        parameter_length_ = 0;
+      } else if (cmd == KEY_BS) {
+        if (parameter_length_ > 0)
+          parameter_length_--;
+        printf("\b \b");
+      } else {
+        parameter_buffer_[parameter_length_++] = cmd;
+        printf("%c", cmd);
+      }
+      break;
+    case STATE_TEST: /* 测试 */
+      if (cmd == CMD_CANCEL && length == 1) {
+        elog_set_raw_output_enabled(false);
+        next_state_ = STATE_CMD;
+      }
+  }
+
+  if (next_state_ != current_state_) {
+    /* 首次进入状态输出信息 */
+    switch (next_state_) {
+      case STATE_CMD:PrintInfoMenu();
+        break;
+      case STATE_SET:PrintCurrentParameters();
+        log_v("Press ESC to exit, Enter to set");
+        break;
+      case STATE_TEST:elog_set_raw_output_enabled(true);
+        break;
+    }
+  }
+}
+
+/*
+ * @brief STATE_CMD模式下解析命令
+ */
+void Debug::ParseCommand(uint8_t *str, int32_t length) {
+  if (1 != length) {
+    return;
+  }
+  uint8_t cmd = *str;
+  switch (cmd) {
+    case CMD_INFO:PrintInfoMenu();
+      break;
+    case CMD_MENU:PrintHelpMenu();
+      break;
+    case CMD_SET:next_state_ = STATE_SET;
+      break;
+    case CMD_LOOKUP: PrintCurrentParameters();
+      break;
+    case CMD_TEST:next_state_ = STATE_TEST;
+      break;
+    default:break;
+  }
+}
+
+/*
+ * @brief  解析参数
+ * 示例: "key:value"
+ */
+void Debug::ParseParameter(uint8_t *str, int32_t length) {
+  std::string cpp_str(reinterpret_cast<char *>(str), length);
+  auto pos = cpp_str.find(':');
+  if (pos != std::string::npos) {
+    std::string key = cpp_str.substr(0, pos);
+    std::string value = cpp_str.substr(pos + 1);
+    parameter_list_[key] = std::stof(value);
+    parameter_changed_list_[key] = 1;
+    /* 使用特殊格式，不要覆盖vofa的数据 */
+    log_v("");
+    log_v("Set key| %s:%.3f", key.c_str(), parameter_list_.at(key));
+    log_v("Press ESC to exit, Enter to set");
+//    PrintCurrentParameters();
+  }
+}
 extern "C" {
 
 /*
@@ -133,7 +213,8 @@ extern "C" {
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
   if (huart->Instance == huart1.Instance) {
     Debug &debug = Debug::instance(); // Copy will generate new instance, use &
-    debug.ParseParameter(huart->pRxBuffPtr, Size);
+//    debug.ParseParameter(huart->pRxBuffPtr, Size);
+    debug.FsmInput(huart->pRxBuffPtr, Size);
     /* Start DMA again */
     Debug::instance().StartReceive();
   }
@@ -163,7 +244,6 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
  * 新的数据，因此每次执行需要使用循环获取log，外部释放多少次信号量任务就可以循环多少次
  */
 extern osSemaphoreId_t elog_asyncHandle;
-int time = 0;
 extern void elog_port_output(const char *log, size_t size);
 void DefaultTask(void *argument) {
   size_t get_log_size = 0;
@@ -179,7 +259,6 @@ void DefaultTask(void *argument) {
     osSemaphoreAcquire(elog_asyncHandle, osWaitForever);
 //    while (1) {
     {
-      time++;
       /* polling gets and outputs the log */
 #ifdef ELOG_ASYNC_LINE_OUTPUT
       get_log_size = elog_async_get_line_log(poll_get_buf, sizeof(poll_get_buf));

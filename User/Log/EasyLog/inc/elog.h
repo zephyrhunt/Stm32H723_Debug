@@ -181,6 +181,7 @@ typedef struct {
     size_t enabled_fmt_set[ELOG_LVL_TOTAL_NUM];
     bool init_ok;
     bool output_enabled;
+    bool output_raw_enabled;
     bool output_lock_enabled;
     bool output_is_locked_before_enable;
     bool output_is_locked_before_disable;
@@ -202,6 +203,7 @@ void elog_deinit(void);
 void elog_start(void);
 void elog_stop(void);
 void elog_set_output_enabled(bool enabled);
+void elog_set_raw_output_enabled(bool enabled);
 bool elog_get_output_enabled(void);
 void elog_set_text_color_enabled(bool enabled);
 bool elog_get_text_color_enabled(void);

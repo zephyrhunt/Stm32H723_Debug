@@ -39,9 +39,9 @@
 /* buffer size for every line's log */
 #define ELOG_LINE_BUF_SIZE                       512
 /* output line number max length */
-#define ELOG_LINE_NUM_MAX_LEN                    5
+#define ELOG_LINE_NUM_MAX_LEN                    8
 /* output filter's tag max length */
-#define ELOG_FILTER_TAG_MAX_LEN                  4
+#define ELOG_FILTER_TAG_MAX_LEN                  8
 /* output filter's keyword max length */
 #define ELOG_FILTER_KW_MAX_LEN                   16
 /* output filter's tag level max num */
@@ -57,7 +57,7 @@
 #define ELOG_COLOR_WARN                          (F_YELLOW B_NULL S_NORMAL)
 #define ELOG_COLOR_INFO                          (F_CYAN B_NULL S_NORMAL)
 #define ELOG_COLOR_DEBUG                         (F_GREEN B_NULL S_NORMAL)
-#define ELOG_COLOR_VERBOSE                       (F_BLUE B_NULL S_NORMAL)
+#define ELOG_COLOR_VERBOSE                       (F_RED B_NULL S_NORMAL)
 /*---------------------------------------------------------------------------*/
 /* enable asynchronous output mode */
 #define ELOG_ASYNC_OUTPUT_ENABLE

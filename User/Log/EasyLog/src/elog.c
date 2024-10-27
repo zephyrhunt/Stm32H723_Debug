@@ -235,6 +235,7 @@ void elog_start(void) {
     
     /* enable output */
     elog_set_output_enabled(true);
+    elog_set_raw_output_enabled(true);
 
 #if defined(ELOG_ASYNC_OUTPUT_ENABLE)
     elog_async_enabled(true);
@@ -277,6 +278,16 @@ void elog_set_output_enabled(bool enabled) {
     ELOG_ASSERT((enabled == false) || (enabled == true));
 
     elog.output_enabled = enabled;
+}
+
+/**
+ * set raw output enable or disable
+ *
+ * @param enabled TRUE: enable FALSE: disable
+ */
+void elog_set_raw_output_enabled(bool enabled) {
+    ELOG_ASSERT((enabled == false) || (enabled == true));
+    elog.output_raw_enabled = enabled;
 }
 
 #ifdef ELOG_COLOR_ENABLE
@@ -510,6 +521,10 @@ void elog_raw_output(const char *format, ...) {
     size_t log_len = 0;
     int fmt_result;
 
+    /* 用来屏蔽raw信息 */
+    if (!elog.output_raw_enabled) {
+      return;
+    }
     /* check output enabled */
     if (!elog.output_enabled) {
         return;

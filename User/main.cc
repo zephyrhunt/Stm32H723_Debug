@@ -13,6 +13,7 @@ void Main() {
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 50);
 }
 
+extern int time;
 extern "C" {
 /*
  * @brief IMU任务
@@ -20,17 +21,15 @@ extern "C" {
 void TestTask(void *argument) {
   static const char *TAG = "IMU";
   Debug::instance().Init();
+//  log_i("EasyLogger V%s is initialize success.", ELOG_SW_VERSION);
+  // 1ms以内，小于时间片不会切换到其他任务
   log_w("Hello nichijou warning!");
-  log_i("Hello nichijou info!");
-  log_d("Hello nichijou debug!");
-  log_v("Hello nichijou verbose!");
-  log_e("Hello World!");
-  vTaskDelay(2000);
   static TickType_t xLastWakeTime = xTaskGetTickCount();
   int xx = 0;
+  elog_set_output_enabled(false);
   while (1) {
-//    log_w("Hello World!:%d", xx);
-//    elog_raw("raw:%d\n", xx);
+    log_w("Hello World!:%d", xx);
+    elog_raw("raw:%d\r\n", xx);
     xx++;
     vTaskDelayUntil(&xLastWakeTime, 1);
   }

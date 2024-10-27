@@ -264,9 +264,9 @@ __exit:
 }
 #endif /* ELOG_ASYNC_LINE_OUTPUT */
 
+/* this function must be implement by user when ELOG_ASYNC_OUTPUT_USING_PTHREAD is not defined */
+extern void elog_async_output_notice(void);
 void elog_async_output(uint8_t level, const char *log, size_t size) {
-    /* this function must be implement by user when ELOG_ASYNC_OUTPUT_USING_PTHREAD is not defined */
-    extern void elog_async_output_notice(void);
     size_t put_size;
 
     if (is_enabled) {

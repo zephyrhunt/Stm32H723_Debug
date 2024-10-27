@@ -31,19 +31,21 @@
 #include "cmsis_os2.h"
 #include "usart.h"
 
-extern osSemaphoreId_t elog_lockHandle;
-extern osSemaphoreId_t elog_asyncHandle;
-/* 需要在发送完成时释放该信号量 */
-extern osSemaphoreId_t elog_dma_lockHandle;
+
+/* 信号量，需要在CubeMX中配置 */
+extern osSemaphoreId_t elog_lockHandle; /*< 发送信号量 */
+extern osSemaphoreId_t elog_asyncHandle; /*< 异步发送信号量，释放时才一起发送 */
+extern osSemaphoreId_t elog_dma_lockHandle; /*< 需要在发送完成时释放该信号量 */
 
 /**
  * EasyLogger port initialize
  *
  * @return result
  */
+extern void elog_port_output_unlock(void);
 ElogErrCode elog_port_init(void) {
   ElogErrCode result = ELOG_NO_ERR;
-
+  elog_port_output_unlock();
   /* add your code here */
   return result;
 }
@@ -116,35 +118,5 @@ void elog_async_output_notice(void) {
   osSemaphoreRelease(elog_asyncHandle);
 }
 
-/*
- * @brief 测试任务
- */
-void DefaultTask(void *argument) {
-  /* 初始先解锁输出 */
-  elog_port_output_unlock();
-  size_t get_log_size = 0;
-#ifdef ELOG_ASYNC_LINE_OUTPUT
-  static char poll_get_buf[ELOG_LINE_BUF_SIZE - 4];
-#else
-  static char poll_get_buf[ELOG_ASYNC_OUTPUT_BUF_SIZE - 4];
-#endif
 
-  for (;;) {
-    /* waiting log */
-    osSemaphoreAcquire(elog_asyncHandle, osWaitForever);
-    /* polling gets and outputs the log */
-    while (1) {
-#ifdef ELOG_ASYNC_LINE_OUTPUT
-      get_log_size = elog_async_get_line_log(poll_get_buf, sizeof(poll_get_buf));
-#else
-      get_log_size = elog_async_get_log(poll_get_buf, sizeof(poll_get_buf));
-#endif
-      if (get_log_size) {
-        elog_port_output(poll_get_buf, get_log_size);
-      } else {
-        break;
-      }
-    }
-  }
-}
 

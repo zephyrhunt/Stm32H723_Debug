@@ -26,28 +26,32 @@ int _write(int fd, char *ptr, int len) {
 }
 }
 
+/*
+ * @brief 调试初始化，使能中断，配置elog
+ * @note 该函数涉及信号量，需要在任务中初始化，不能在main函数中初始化
+ */
 void Debug::Init() {
   /* Disable I/O buffering for STDOUT stream, so that
    * 关闭printf缓冲区 chars are sent out as soon as they are printed. */
   setvbuf(stdout, nullptr, _IONBF, 0);
   /* Endable usart IDLE interrupt */
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart1, rx_buffer_, sizeof(rx_buffer_));
+  StartReceive();
   __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
   __HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
-  __HAL_UART_ENABLE_IT(&huart1, UART_IT_TC);
-  __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
-  /* initialize EasyLogger */
+  /* 下面语句分别会触发一次中断 */
+//  __HAL_UART_ENABLE_IT(&huart1, UART_IT_TC);
+//  __HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
   elog_init();
-  elog_output_lock_enabled(1);
-/* set EasyLogger log format */
   elog_set_fmt(ELOG_LVL_ASSERT, ELOG_FMT_ALL);
   elog_set_fmt(ELOG_LVL_ERROR, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_FUNC | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_WARN, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_INFO, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_DEBUG, ELOG_FMT_LVL | ELOG_FMT_TAG | ELOG_FMT_TIME);
   elog_set_fmt(ELOG_LVL_VERBOSE, ELOG_FMT_ALL & ~ELOG_FMT_FUNC);
-/* start EasyLogger */
   elog_start();
+
+  /* 输出软件信息 */
+  PrintInfo();
 }
 
 /*
@@ -59,7 +63,13 @@ void Debug::ParseParameter(uint8_t *str, int32_t length) {
     /* 单个字符命令，来自串口终端 */
     if (*str == 13) {
       /* 回车键 Enter*/
+      elog_set_output_enabled(true);
       elog_raw("\n\r");
+    } else if (*str == 0x03) {
+      /* Ctrl+C */
+      PrintInfo();
+      elog_raw("\n\r");
+      elog_set_output_enabled(false);
     } else if (*str == 127 || *str == '\b') {
       /* 退格键 Delete*/
       elog_raw("\b \b");
@@ -96,6 +106,25 @@ Debug &Debug::instance() {
   return debug;
 }
 
+/*
+ * @brief 输出软件信息
+ */
+void Debug::PrintInfo() {
+  // 打印NICHIJOU大字
+  // 输出红色
+  elog_raw("\033[31m\r\n");
+  elog_raw(" _      _  ____  _     _     _  ____  _    \r\n");
+  elog_raw("/ \\  /|/ \\/   _\\/ \\ /|/ \\   / |/  _ \\/ \\ /\\\r\n");
+  elog_raw("| |\\ ||| ||  /  | |_||| |   | || / \\|| | ||\r\n");
+  elog_raw("| | \\||| ||  \\__| | ||| |/\\_| || \\_/|| \\_/|\r\n");
+  elog_raw("\\_/  \\|\\_/\\____/\\_/ \\|\\_/\\____/\\____/\\____/\r\n");
+  // 获取编译事件
+  elog_raw("Build time: %s %s\r\n", __DATE__, __TIME__);
+  elog_raw("Project Stm32H723_Debug, Version 1.0\r\n");
+  elog_raw("\033[0m");
+  elog_raw("Press Enter or Send 0x0D to start,<C-c> Stop......\r\n");
+}
+
 extern "C" {
 
 /*
@@ -123,9 +152,46 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 extern osSemaphoreId_t elog_dma_lockHandle;
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
   if (huart->Instance == huart1.Instance) {
-    /* 发送完成才释放信号量 */
+    /* DMA发送锁，发送完成才能进行下一次发送 */
     osSemaphoreRelease(elog_dma_lockHandle);
   }
 }
 
+/*
+ * @brief 信息输出任务，异步输出
+ * @note elog_port_output会根据DMA状态挂起任务，所以可能会在任务挂起过程中log中出现
+ * 新的数据，因此每次执行需要使用循环获取log，外部释放多少次信号量任务就可以循环多少次
+ */
+extern osSemaphoreId_t elog_asyncHandle;
+int time = 0;
+extern void elog_port_output(const char *log, size_t size);
+void DefaultTask(void *argument) {
+  size_t get_log_size = 0;
+#ifdef ELOG_ASYNC_LINE_OUTPUT
+  static char poll_get_buf[ELOG_LINE_BUF_SIZE - 4];
+#else
+  static char poll_get_buf[ELOG_ASYNC_OUTPUT_BUF_SIZE - 4];
+#endif
+
+  for (;;) {
+    /* waiting log 由elog_async_output释放 */
+    /* 释放多少次就可以循环多少次 */
+    osSemaphoreAcquire(elog_asyncHandle, osWaitForever);
+//    while (1) {
+    {
+      time++;
+      /* polling gets and outputs the log */
+#ifdef ELOG_ASYNC_LINE_OUTPUT
+      get_log_size = elog_async_get_line_log(poll_get_buf, sizeof(poll_get_buf));
+#else
+      get_log_size = elog_async_get_log(poll_get_buf, sizeof(poll_get_buf));
+#endif
+      if (get_log_size) {
+        elog_port_output(poll_get_buf, get_log_size);
+      } else {
+        break;
+      }
+    }
+  }
+}
 }
